@@ -73,7 +73,7 @@ static void kernel_correlation(int m, int n,
   for (j = 0; j < _PB_M; j++)
   {
     stddev[j] = 0.0;
-    #pragma omp simd reduction(+:stddev[j]
+    #pragma omp simd reduction(+:stddev[j])
     for (i = 0; i < _PB_N; i++)
       stddev[j] += (data[i][j] - mean[j]) * (data[i][j] - mean[j]);
     stddev[j] /= float_n;
@@ -94,15 +94,14 @@ static void kernel_correlation(int m, int n,
     }
 
   /* Calculate the m * m correlation matrix. */
-  #pragma omp parallel for private(j1, j2, i) shared(data, symmat)
+  #pragma omp parallel for private(j1, j2, i)
   for (j1 = 0; j1 < _PB_M - 1; j1++)
   {
     symmat[j1][j1] = 1.0;
-    #pragma omp for private(i) shared(data, symmat, j1) reduction(+:symmat[j1][j1])
     for (j2 = j1 + 1; j2 < _PB_M; j2++)
     {
       symmat[j1][j2] = 0.0;
-      #pragma omp for private(i) shared(data, symmat, j1, j2) reduction(+:symmat[j1][j2])
+      #pragma omp simd reduction(+:symmat[j1][j2])
       for (i = 0; i < _PB_N; i++)
         symmat[j1][j2] += (data[i][j1] * data[i][j2]);
       symmat[j2][j1] = symmat[j1][j2];
