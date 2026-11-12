@@ -58,12 +58,12 @@ static void kernel_correlation(int m, int n,
   DATA_TYPE eps = 0.1f;
 
 #define sqrt_of_array_cell(x, j) sqrt(x[j])
-#pragma omp target data map(to : data[0 : n][0 : m]) \
+#pragma omp target data map(to : data[0 : n][0 : m], square) \
     map(from : symmat[0 : m][0 : m])                 \
     map(alloc : mean[0 : m], stddev[0 : m])
   {
     /* Determine mean of column vectors of input data matrix */
-#pragma omp target teams distribute parallel for private(j, i) shared(data, mean, float_n) schedule(static)
+#pragma omp target teams distribute parallel for private(j, i) shared(data) schedule(static)
     for (j = 0; j < _PB_M; j++)
     {
 
@@ -76,7 +76,7 @@ static void kernel_correlation(int m, int n,
       mean[j] /= float_n;
     }
     /* Determine standard deviations of column vectors of data matrix. */
-#pragma omp parallel for private(j, i) shared(data, mean, stddev, float_n)
+#pragma omp parallel for private(j, i) shared(stddev)
     for (j = 0; j < _PB_M; j++)
     {
       stddev[j] = 0.0;
@@ -92,7 +92,7 @@ static void kernel_correlation(int m, int n,
     }
 
     /* Center and reduce the column vectors. */
-#pragma omp parallel for private(i, j) shared(data, mean, stddev, float_n) collapse(2)
+#pragma omp target teams distribute parallel for private(i, j) shared(data, mean, stddev, float_n) collapse(2)
     for (i = 0; i < _PB_N; i++)
       for (j = 0; j < _PB_M; j++)
       {
