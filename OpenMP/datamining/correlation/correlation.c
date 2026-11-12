@@ -58,7 +58,7 @@ static void kernel_correlation(int m, int n,
   DATA_TYPE eps = 0.1f;
 
 #define sqrt_of_array_cell(x, j) sqrt(x[j])
-#pragma omp target data map(to : data[0 : n][0 : m], square) \
+#pragma omp target data map(to : data[0 : n][0 : m], square, float_n) \
     map(from : symmat[0 : m][0 : m])                 \
     map(alloc : mean[0 : m], stddev[0 : m])
   {
@@ -92,7 +92,7 @@ static void kernel_correlation(int m, int n,
     }
 
     /* Center and reduce the column vectors. */
-#pragma omp target teams distribute parallel for private(i, j) shared(data, mean, stddev, float_n) collapse(2)
+#pragma omp target teams distribute parallel for private(i, j) shared(data) collapse(2)
     for (i = 0; i < _PB_N; i++)
       for (j = 0; j < _PB_M; j++)
       {
