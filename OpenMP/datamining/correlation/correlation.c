@@ -76,7 +76,7 @@ static void kernel_correlation(int m, int n,
       mean[j] /= float_n;
     }
     /* Determine standard deviations of column vectors of data matrix. */
-#pragma omp parallel for private(j, i) shared(stddev)
+#pragma omp target teams distribute parallel for private(j, i) shared(stddev)
     for (j = 0; j < _PB_M; j++)
     {
       stddev[j] = 0.0;
