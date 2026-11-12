@@ -58,57 +58,64 @@ static void kernel_correlation(int m, int n,
   DATA_TYPE eps = 0.1f;
 
 #define sqrt_of_array_cell(x, j) sqrt(x[j])
-
-  /* Determine mean of column vectors of input data matrix */
-#pragma omp target teams distribute parallel for private(j, i) shared(data, mean, float_n) schedule(dynamic)
-  for (j = 0; j < _PB_M; j++)
+#pragma omp target data map(to : data[0 : n][0 : m]) \
+    map(from : symmat[0 : m][0 : m])                 \
+    map(alloc : mean[0 : m], stddev[0 : m])
   {
-    mean[j] = 0.0;
-    #pragma omp simd reduction(+:mean[j])
-    for (i = 0; i < _PB_N; i++)
-      mean[j] += data[i][j];
-    mean[j] /= float_n;
-  }
-  /* Determine standard deviations of column vectors of data matrix. */
-#pragma omp target teams distribute parallel for private(j, i) shared(data, mean, stddev, float_n) schedule(dynamic)
-  for (j = 0; j < _PB_M; j++)
-  {
-    stddev[j] = 0.0;
-    #pragma omp simd reduction(+:stddev[j])
-    for (i = 0; i < _PB_N; i++)
-      stddev[j] += (data[i][j] - mean[j]) * (data[i][j] - mean[j]);
-    stddev[j] /= float_n;
-    stddev[j] = sqrt_of_array_cell(stddev, j);
-    /* The following in an inelegant but usual way to handle
-       near-zero std. dev. values, which below would cause a zero-
-       divide. */
-    stddev[j] = stddev[j] <= eps ? 1.0 : stddev[j];
-  }
-
-  /* Center and reduce the column vectors. */
-#pragma omp target teams distribute parallel for private(i, j) shared(data, mean, stddev, float_n) collapse(2)
-  for (i = 0; i < _PB_N; i++)
+    /* Determine mean of column vectors of input data matrix */
+#pragma omp target teams distribute parallel for private(j, i) shared(data, mean, float_n) schedule(static)
     for (j = 0; j < _PB_M; j++)
     {
-      data[i][j] -= mean[j];
-      data[i][j] /= square * stddev[j];
+
+      mean[j] = 0.0;
+#pragma omp simd reduction(+ : mean[j])
+      for (i = 0; i < _PB_N; i++)
+      {
+        mean[j] += data[i][j];
+      }
+      mean[j] /= float_n;
+    }
+    /* Determine standard deviations of column vectors of data matrix. */
+#pragma omp parallel for private(j, i) shared(data, mean, stddev, float_n)
+    for (j = 0; j < _PB_M; j++)
+    {
+      stddev[j] = 0.0;
+#pragma omp simd reduction(+ : stddev[j])
+      for (i = 0; i < _PB_N; i++)
+        stddev[j] += (data[i][j] - mean[j]) * (data[i][j] - mean[j]);
+      stddev[j] /= float_n;
+      stddev[j] = sqrt_of_array_cell(stddev, j);
+      /* The following in an inelegant but usual way to handle
+         near-zero std. dev. values, which below would cause a zero-
+         divide. */
+      stddev[j] = stddev[j] <= eps ? 1.0 : stddev[j];
     }
 
-  /* Calculate the m * m correlation matrix. */
-  #pragma omp target teams distribute parallel for private(j1, j2, i) schedule(dynamic)
-  for (j1 = 0; j1 < _PB_M - 1; j1++)
-  {
-    symmat[j1][j1] = 1.0;
-    for (j2 = j1 + 1; j2 < _PB_M; j2++)
+    /* Center and reduce the column vectors. */
+#pragma omp parallel for private(i, j) shared(data, mean, stddev, float_n) collapse(2)
+    for (i = 0; i < _PB_N; i++)
+      for (j = 0; j < _PB_M; j++)
+      {
+        data[i][j] -= mean[j];
+        data[i][j] /= square * stddev[j];
+      }
+
+/* Calculate the m * m correlation matrix. */
+#pragma omp target teams distribute parallel for private(j1, j2, i)
+    for (j1 = 0; j1 < _PB_M - 1; j1++)
     {
-      symmat[j1][j2] = 0.0;
-      #pragma omp simd reduction(+:symmat[j1][j2])
-      for (i = 0; i < _PB_N; i++)
-        symmat[j1][j2] += (data[i][j1] * data[i][j2]);
-      symmat[j2][j1] = symmat[j1][j2];
+      symmat[j1][j1] = 1.0;
+      for (j2 = j1 + 1; j2 < _PB_M; j2++)
+      {
+        symmat[j1][j2] = 0.0;
+#pragma omp simd reduction(+ : symmat[j1][j2])
+        for (i = 0; i < _PB_N; i++)
+          symmat[j1][j2] += (data[i][j1] * data[i][j2]);
+        symmat[j2][j1] = symmat[j1][j2];
+      }
     }
+    symmat[_PB_M - 1][_PB_M - 1] = 1.0;
   }
-  symmat[_PB_M - 1][_PB_M - 1] = 1.0;
 }
 
 int main(int argc, char **argv)
