@@ -53,13 +53,14 @@ static void kernel_correlation(int m, int n,
                                DATA_TYPE POLYBENCH_1D(stddev, M, m))
 {
   int i, j, j1, j2;
+  double square = sqrt(float_n);
 
   DATA_TYPE eps = 0.1f;
 
 #define sqrt_of_array_cell(x, j) sqrt(x[j])
 
   /* Determine mean of column vectors of input data matrix */
-#pragma omp parallel for private(j, i) shared(data, mean, float_n)
+#pragma omp target teams distribute parallel for private(j, i) shared(data, mean, float_n) schedule(dynamic)
   for (j = 0; j < _PB_M; j++)
   {
     mean[j] = 0.0;
@@ -69,7 +70,7 @@ static void kernel_correlation(int m, int n,
     mean[j] /= float_n;
   }
   /* Determine standard deviations of column vectors of data matrix. */
-#pragma omp parallel for private(j, i) shared(data, mean, stddev, float_n)
+#pragma omp target teams distribute parallel for private(j, i) shared(data, mean, stddev, float_n) schedule(dynamic)
   for (j = 0; j < _PB_M; j++)
   {
     stddev[j] = 0.0;
@@ -85,16 +86,16 @@ static void kernel_correlation(int m, int n,
   }
 
   /* Center and reduce the column vectors. */
-#pragma omp parallel for private(i, j) shared(data, mean, stddev, float_n) collapse(2)
+#pragma omp target teams distribute parallel for private(i, j) shared(data, mean, stddev, float_n) collapse(2)
   for (i = 0; i < _PB_N; i++)
     for (j = 0; j < _PB_M; j++)
     {
       data[i][j] -= mean[j];
-      data[i][j] /= sqrt(float_n) * stddev[j];
+      data[i][j] /= square * stddev[j];
     }
 
   /* Calculate the m * m correlation matrix. */
-  #pragma omp parallel for private(j1, j2, i)
+  #pragma omp target teams distribute parallel for private(j1, j2, i) schedule(dynamic)
   for (j1 = 0; j1 < _PB_M - 1; j1++)
   {
     symmat[j1][j1] = 1.0;
